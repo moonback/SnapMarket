@@ -14,3 +14,4 @@ coverage/
 apps/mobile/ios/
 apps/mobile/android/
 next-env.d.ts
+dump.rdb
