@@ -11,7 +11,8 @@ import { Paginated, ProductDetail, ProductSummary } from '@snapmarket/shared';
 import { AuditService } from '../audit/audit.service';
 import { categoryDto } from '../categories/categories.service';
 import { AuthUser } from '../common/decorators/auth.decorators';
-import { decodeCursor, pageSize, paginate } from '../common/utils/pagination';
+import { CursorPayload, decodeCursor, pageSize, paginate } from '../common/utils/pagination';
+import { matchReasons, PersonalizationService } from '../feed/personalization.service';
 import { MediaService } from '../media/media.service';
 import { SpamService } from '../moderation/spam.service';
 import { StripeService } from '../payments/stripe.service';
@@ -60,6 +61,7 @@ export class ProductsService {
     private readonly spam: SpamService,
     private readonly stripe: StripeService,
     private readonly audit: AuditService,
+    private readonly personalization: PersonalizationService,
   ) {}
 
   // ------------------------------------------------------------------
@@ -255,10 +257,18 @@ export class ProductsService {
     excludeOwn = false,
   ): Promise<Paginated<ProductSummary>> {
     const limit = pageSize(query.limit);
-    const sort: ProductSort = query.sort ?? 'recent';
+    let sort: ProductSort = query.sort ?? 'recent';
     const cursor = decodeCursor(query.cursor);
     const blocked = await this.users.blockedIds(viewer?.id);
     const excluded = excludeOwn && viewer ? [...blocked, viewer.id] : blocked;
+
+    // Sans compte ou personnalisation désactivée : repli sur le tri chronologique.
+    if (sort === 'for_you') {
+      if (viewer && (await this.personalization.isEnabled(viewer.id))) {
+        return this.searchForYou(query, viewer, excluded, cursor, limit);
+      }
+      sort = 'recent';
+    }
 
     const and: Prisma.ProductWhereInput[] = [PUBLICLY_VISIBLE];
     if (excluded.length > 0) and.push({ sellerId: { notIn: excluded } });
@@ -309,6 +319,36 @@ export class ProductsService {
       id: p.id,
     }));
     return { items: await this.toSummaries(page.items, viewer), nextCursor: page.nextCursor };
+  }
+
+  private async searchForYou(
+    query: SearchProductsDto,
+    viewer: AuthUser,
+    excluded: string[],
+    cursor: CursorPayload | null,
+    limit: number,
+  ): Promise<Paginated<ProductSummary>> {
+    const signals = await this.personalization.signals(viewer.id);
+    const ranked = await this.personalization.rankedIds(
+      query,
+      excluded,
+      signals,
+      cursor,
+      limit + 1,
+    );
+    const rows = await this.prisma.product.findMany({
+      where: { id: { in: ranked.map((r) => r.id) } },
+      include: PRODUCT_SUMMARY_INCLUDE,
+    });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const ordered = ranked.filter((r) => byId.has(r.id));
+    const page = paginate(ordered, limit, (r) => ({ v: r.score, id: r.id }));
+    const products = page.items.map((r) => byId.get(r.id)!);
+    const summaries = await this.toSummaries(products, viewer);
+    return {
+      items: summaries.map((s, i) => ({ ...s, matchReasons: matchReasons(products[i]!, signals) })),
+      nextCursor: page.nextCursor,
+    };
   }
 
   async listMine(user: AuthUser, query: MyProductsDto): Promise<Paginated<ProductSummary>> {

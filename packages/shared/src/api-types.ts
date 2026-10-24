@@ -83,6 +83,7 @@ export interface MeUser extends PublicUser {
   role: UserRole;
   status: UserStatus;
   seller: SellerProfileDto | null;
+  personalizedFeed: boolean;
 }
 
 export interface SellerProfileDto {
@@ -130,6 +131,19 @@ export interface ProductSummary {
   isFavorite: boolean;
   favoritesCount: number;
   createdAt: string;
+  /** Raisons explicites de mise en avant dans le flux « Pour vous » (vide sinon). */
+  matchReasons?: FeedMatchReason[];
+}
+
+export type FeedMatchReason = 'FAVORITE_CATEGORY' | 'FAVORITE_BRAND';
+
+/** Signaux utilisés pour le flux « Pour vous », exposés à l'utilisateur. */
+export interface FeedPersonalization {
+  enabled: boolean;
+  categories: { id: string; name: string }[];
+  brands: string[];
+  /** Avance accordée dans le classement, en heures, par type de signal. */
+  boostHours: Record<FeedMatchReason, number>;
 }
 
 export interface ProductDetail extends ProductSummary {

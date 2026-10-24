@@ -45,6 +45,7 @@ export class UsersService {
       role: user.role,
       status: user.status,
       seller: sellerProfileDto(user.sellerProfile),
+      personalizedFeed: user.personalizedFeed,
     };
   }
 
@@ -113,6 +114,7 @@ export class UsersService {
         username: dto.username,
         bio: dto.bio,
         city: dto.city,
+        personalizedFeed: dto.personalizedFeed,
         avatarMediaId,
       },
     });

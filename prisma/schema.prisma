@@ -230,6 +230,8 @@ model User {
   status           UserStatus @default(ACTIVE)
   emailVerifiedAt  DateTime?
   termsAcceptedAt  DateTime?
+  /// Classement « Pour vous » du flux (signaux explicites uniquement). Désactivable.
+  personalizedFeed Boolean    @default(true)
   failedLoginCount Int        @default(0)
   /// Agrégats dénormalisés des avis visibles reçus (mis à jour en transaction).
   ratingCount      Int        @default(0)

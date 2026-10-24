@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-query';
 import type {
   CategoryDto,
+  FeedPersonalization,
   ConversationDto,
   MessageDto,
   NotificationDto,
@@ -37,7 +38,8 @@ export interface FeedFilters {
   conditions?: string[];
   deliveryMode?: 'SHIPPING' | 'MEETUP';
   department?: string;
-  sort?: 'recent' | 'price_asc' | 'price_desc';
+  /** Absent : « Pour vous » côté serveur (repli chronologique si désactivé). */
+  sort?: 'for_you' | 'recent' | 'price_asc' | 'price_desc';
 }
 
 const nextCursor = <T>(last: Paginated<T>) => last.nextCursor ?? undefined;
@@ -129,6 +131,12 @@ export function useToggleFavorite() {
     },
   });
 }
+
+export const usePersonalization = () =>
+  useQuery({
+    queryKey: ['personalization'],
+    queryFn: () => api.request<FeedPersonalization>('/feed/personalization'),
+  });
 
 export const useStories = () =>
   useQuery({ queryKey: keys.stories, queryFn: () => api.request<StoryGroupDto[]>('/stories') });

@@ -64,6 +64,7 @@ export const updateProfileSchema = z.object({
   username: usernameSchema.optional(),
   bio: z.string().trim().max(BIO_MAX).optional(),
   city: z.string().trim().max(80).optional(),
+  personalizedFeed: z.boolean().optional(),
 });
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 

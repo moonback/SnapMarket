@@ -33,7 +33,7 @@ export default function Discover() {
     filters.deliveryMode,
     filters.department,
     filters.conditions?.length,
-    filters.sort && filters.sort !== 'recent',
+    filters.sort && filters.sort !== 'for_you',
   ].filter(Boolean).length;
 
   return (

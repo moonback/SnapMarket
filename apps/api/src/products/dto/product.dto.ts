@@ -121,7 +121,8 @@ export class CreateProductDto {
 
 export class UpdateProductDto extends PartialType(CreateProductDto) {}
 
-export const PRODUCT_SORTS = ['recent', 'price_asc', 'price_desc'] as const;
+/** « for_you » : classement personnalisé documenté dans feed/personalization.service.ts. */
+export const PRODUCT_SORTS = ['recent', 'price_asc', 'price_desc', 'for_you'] as const;
 export type ProductSort = (typeof PRODUCT_SORTS)[number];
 
 export class SearchProductsDto extends CursorQueryDto {

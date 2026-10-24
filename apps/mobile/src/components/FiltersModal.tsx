@@ -10,6 +10,7 @@ import { colors, radius, spacing } from '../theme/tokens';
 import { AppText, Button, Chip, TextField } from './ui';
 
 const SORTS: { value: NonNullable<FeedFilters['sort']>; label: string }[] = [
+  { value: 'for_you', label: 'Pour vous' },
   { value: 'recent', label: 'Plus récents' },
   { value: 'price_asc', label: 'Prix croissant' },
   { value: 'price_desc', label: 'Prix décroissant' },
@@ -69,7 +70,7 @@ export function FiltersModal({
             <Chip
               key={s.value}
               label={s.label}
-              selected={(draft.sort ?? 'recent') === s.value}
+              selected={(draft.sort ?? 'for_you') === s.value}
               onPress={() => setDraft({ ...draft, sort: s.value })}
             />
           ))}

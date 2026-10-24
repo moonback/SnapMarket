@@ -1,6 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { BIO_MAX, PASSWORD_MAX, USERNAME_REGEX } from '@snapmarket/shared';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
@@ -33,6 +41,11 @@ export class UpdateProfileDto {
   @IsString()
   @MaxLength(80)
   city?: string;
+
+  @ApiPropertyOptional({ description: 'Activer le classement « Pour vous » du flux' })
+  @IsOptional()
+  @IsBoolean()
+  personalizedFeed?: boolean;
 
   @ApiPropertyOptional({ description: 'Identifiant d’un média AVATAR, ou null pour retirer' })
   @IsOptional()
