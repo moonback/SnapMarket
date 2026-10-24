@@ -1,0 +1,57 @@
+{
+  "name": "snapmarket",
+  "private": true,
+  "version": "0.1.0",
+  "description": "SnapMarket — marketplace sociale (mobile, API, administration)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "build:shared": "npm run build -w @snapmarket/shared",
+    "build": "npm run build:shared && npm run build -w @snapmarket/api && npm run build -w @snapmarket/admin",
+    "dev:api": "npm run start:dev -w @snapmarket/api",
+    "dev:worker": "npm run start:worker -w @snapmarket/api",
+    "dev:admin": "npm run dev -w @snapmarket/admin",
+    "dev:mobile": "npm run start -w @snapmarket/mobile",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
+    "admin:create": "tsx prisma/create-admin.ts",
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "postinstall": "prisma generate && npm run build:shared"
+  },
+  "prisma": {
+    "schema": "prisma/schema.prisma",
+    "seed": "tsx prisma/seed.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@types/node": "^22.18.0",
+    "eslint": "^9.39.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^16.5.0",
+    "prettier": "^3.6.2",
+    "prisma": "6.19.3",
+    "tsx": "^4.20.6",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.0"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3",
+    "argon2": "^0.45.1"
+  },
+  "overrides": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  }
+}

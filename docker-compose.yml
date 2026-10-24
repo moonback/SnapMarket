@@ -1,0 +1,60 @@
+# Services d'infrastructure pour le développement local uniquement.
+# Ne pas utiliser ces identifiants en production.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: snapmarket
+      POSTGRES_PASSWORD: snapmarket
+      POSTGRES_DB: snapmarket
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U snapmarket']
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    volumes:
+      - redisdata:/data
+
+  # Stockage objet compatible S3 (remplacé par S3/R2/Scaleway… en production)
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: snapmarket
+      MINIO_ROOT_PASSWORD: snapmarket-dev-secret
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - miniodata:/data
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 snapmarket snapmarket-dev-secret; do sleep 1; done;
+      mc mb --ignore-existing local/snapmarket-media;
+      exit 0;
+      "
+
+  # Capture des emails en développement (interface web sur :8025)
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - '1025:1025'
+      - '8025:8025'
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:

@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint, format, types, tests unitaires
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm test -w @snapmarket/shared
+      - run: npm test -w @snapmarket/admin
+      - run: npm test -w @snapmarket/mobile
+
+  api-e2e:
+    name: API — tests unitaires et e2e (PostgreSQL + Redis)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: snapmarket
+          POSTGRES_PASSWORD: snapmarket
+          POSTGRES_DB: snapmarket_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U snapmarket" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+    env:
+      TEST_DATABASE_URL: postgresql://snapmarket:snapmarket@localhost:5432/snapmarket_test?schema=public
+      TEST_REDIS_URL: redis://localhost:6379/15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test -w @snapmarket/api
+
+  build:
+    name: Builds (API, admin, bundle mobile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @snapmarket/api
+      - run: npm run build -w @snapmarket/admin
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+      - name: Bundle Expo (Android)
+        working-directory: apps/mobile
+        run: npx expo export --platform android --output-dir dist-export
+        env:
+          CI: 1
