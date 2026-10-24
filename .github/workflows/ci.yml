@@ -26,10 +26,9 @@ jobs:
       - run: npm test -w @snapmarket/shared
       - run: npm test -w @snapmarket/admin
       - run: npm test -w @snapmarket/mobile
-      - run: npm run test:unit -w @snapmarket/api
 
   api-e2e:
-    name: API — tests e2e (PostgreSQL + Redis)
+    name: API — tests unitaires et e2e (PostgreSQL + Redis)
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -54,7 +53,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run test:e2e -w @snapmarket/api
+      - run: npm test -w @snapmarket/api
 
   build:
     name: Builds (API, admin, bundle mobile)
