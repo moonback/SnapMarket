@@ -48,7 +48,8 @@
   },
   "dependencies": {
     "@prisma/client": "6.19.3",
-    "argon2": "^0.45.1"
+    "argon2": "^0.45.1",
+    "react-native-web": "^0.21.0"
   },
   "overrides": {
     "react": "19.1.0",
