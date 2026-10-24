@@ -1,0 +1,19 @@
+{
+  "name": "@snapmarket/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Types, énumérations, constantes et schémas Zod partagés",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
+  }
+}

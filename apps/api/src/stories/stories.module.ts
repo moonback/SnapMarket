@@ -1,0 +1,11 @@
+import { Global, Module } from '@nestjs/common';
+import { StoriesController } from './stories.controller';
+import { StoriesService } from './stories.service';
+
+@Global()
+@Module({
+  controllers: [StoriesController],
+  providers: [StoriesService],
+  exports: [StoriesService],
+})
+export class StoriesModule {}
