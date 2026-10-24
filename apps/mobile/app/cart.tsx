@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { initPaymentSheet, presentPaymentSheet } from '@stripe/stripe-react-native';
+import { initPaymentSheet, presentPaymentSheet } from '../src/services/stripe';
 import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';

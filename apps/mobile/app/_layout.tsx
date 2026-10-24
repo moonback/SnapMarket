@@ -1,4 +1,4 @@
-import { StripeProvider } from '@stripe/stripe-react-native';
+import { StripeProvider } from '../src/services/stripe';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';

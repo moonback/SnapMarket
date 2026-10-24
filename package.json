@@ -14,7 +14,7 @@
     "build:shared": "npm run build -w @snapmarket/shared",
     "build": "npm run build:shared && npm run build -w @snapmarket/api && npm run build -w @snapmarket/admin",
     "dev:api": "npm run start:dev -w @snapmarket/api",
-    "dev:worker": "npm run start:worker -w @snapmarket/api",
+    "dev:worker": "npm run start:worker:dev -w @snapmarket/api",
     "dev:admin": "npm run dev -w @snapmarket/admin",
     "dev:mobile": "npm run start -w @snapmarket/mobile",
     "db:generate": "prisma generate",

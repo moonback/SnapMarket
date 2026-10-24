@@ -29,7 +29,7 @@ npm run db:seed                            # catégories + données de démonstr
 npm run admin:create -- --email admin@exemple.fr --username admin   # mot de passe demandé (masqué)
 
 npm run dev:api                            # API : http://localhost:3000/api/v1 — Swagger : /api/docs
-npm run build -w @snapmarket/api && npm run dev:worker   # worker (après un build)
+npm run dev:worker   # worker (watch)
 cp apps/admin/.env.example apps/admin/.env.local && npm run dev:admin   # http://localhost:3001
 cp apps/mobile/.env.example apps/mobile/.env && npm run dev:mobile      # Expo
 ```
