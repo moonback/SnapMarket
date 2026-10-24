@@ -26,7 +26,7 @@ import { SettingsService } from '../settings/settings.service';
 import { UsersService } from '../users/users.service';
 import { AddressDto } from './dto/order.dto';
 import { OrderStateService, reserveStock } from './order-state.service';
-import { computeOrderPricing } from './pricing';
+import { bundleShippingFees, computeOrderPricing } from './pricing';
 
 const MAX_PENDING_CHECKOUTS_PER_BUYER = 5;
 
@@ -43,8 +43,8 @@ export interface CheckoutItemInput {
  * PaymentIntent. La réservation du stock est atomique pour l'ensemble : si un seul
  * article n'est plus disponible, rien n'est réservé.
  *
- * Livraison : chaque annonce porte ses propres frais (pas de regroupement de colis entre
- * annonces d'un même vendeur au MVP). Avant paiement, l'annulation porte sur tout le
+ * Livraison : un colis par vendeur (bundleShippingFees) — une seule commande du vendeur
+ * porte les frais, les autres sont à 0. Avant paiement, l'annulation porte sur tout le
  * paiement groupé : le montant du PaymentIntent reste ainsi égal à la somme des commandes.
  */
 @Injectable()
@@ -95,6 +95,15 @@ export class CheckoutService {
     const byId = new Map(products.map((p) => [p.id, p]));
     const blocked = new Set(await this.users.blockedIds(user.id));
     const { commissionBps } = await this.settings.get();
+    const shippingFees = bundleShippingFees(
+      items.map((item) => {
+        const product = byId.get(item.productId);
+        return {
+          sellerId: product?.sellerId ?? '',
+          feeCents: item.deliveryMode === 'SHIPPING' ? (product?.shippingFeeCents ?? 0) : 0,
+        };
+      }),
+    );
 
     const lines: {
       item: CheckoutItemInput;
@@ -103,7 +112,7 @@ export class CheckoutService {
       unitPriceCents: number;
       pricing: OrderPricing;
     }[] = [];
-    for (const item of items) {
+    for (const [index, item] of items.entries()) {
       const product = byId.get(item.productId);
       if (!product || product.deletedAt) throw new NotFoundException('Annonce introuvable');
       const label = `« ${product.title} »`;
@@ -145,7 +154,7 @@ export class CheckoutService {
       const pricing = computeOrderPricing({
         unitPriceCents,
         quantity,
-        shippingFeeCents: item.deliveryMode === 'SHIPPING' ? (product.shippingFeeCents ?? 0) : 0,
+        shippingFeeCents: shippingFees[index]!,
         commissionBps,
       });
       lines.push({ item, product, quantity, unitPriceCents, pricing });

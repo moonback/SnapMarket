@@ -1,6 +1,19 @@
-import { computeCommissionCents, computeOrderPricing } from './pricing';
+import { bundleShippingFees, computeCommissionCents, computeOrderPricing } from './pricing';
 
 describe('pricing', () => {
+  it('regroupe la livraison par vendeur au montant le plus élevé', () => {
+    expect(
+      bundleShippingFees([
+        { sellerId: 'a', feeCents: 490 },
+        { sellerId: 'b', feeCents: 300 },
+        { sellerId: 'a', feeCents: 690 },
+        { sellerId: 'a', feeCents: 0 },
+        { sellerId: 'b', feeCents: 300 },
+      ]),
+    ).toEqual([0, 300, 690, 0, 0]);
+    expect(bundleShippingFees([{ sellerId: 'a', feeCents: 0 }])).toEqual([0]);
+  });
+
   it('calcule 5 % de commission sur le prix des articles, hors livraison', () => {
     const p = computeOrderPricing({
       unitPriceCents: 2000,

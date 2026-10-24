@@ -35,6 +35,23 @@ export function computeCommissionCents(baseCents: number, commissionBps: number)
   return Math.floor((baseCents * commissionBps + 5_000) / 10_000);
 }
 
+/**
+ * Un colis par vendeur : les annonces expédiées d'un même vendeur ne paient qu'une fois
+ * la livraison, au montant le plus élevé parmi elles. Ce montant est porté par la première
+ * ligne qui l'atteint, les autres lignes du vendeur passent à 0. Ordre des lignes conservé.
+ * shortcut: annuler seule la commande porteuse rembourse toute la livraison du colis ;
+ * à revoir si les annulations partielles d'un même colis deviennent courantes.
+ */
+export function bundleShippingFees(lines: { sellerId: string; feeCents: number }[]): number[] {
+  const carrier = new Map<string, number>();
+  lines.forEach((l, i) => {
+    const best = carrier.get(l.sellerId);
+    if (l.feeCents > 0 && (best === undefined || l.feeCents > lines[best]!.feeCents))
+      carrier.set(l.sellerId, i);
+  });
+  return lines.map((l, i) => (carrier.get(l.sellerId) === i ? l.feeCents : 0));
+}
+
 export function computeOrderPricing(input: PricingInput): OrderPricing {
   assertCents('unitPriceCents', input.unitPriceCents);
   assertCents('shippingFeeCents', input.shippingFeeCents);

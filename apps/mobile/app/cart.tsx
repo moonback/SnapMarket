@@ -280,7 +280,10 @@ export default function Cart() {
             )}
             <Card>
               <Line label="Articles" value={formatCents(c.itemsTotalCents)} />
-              <Line label="Livraison" value={formatCents(c.shippingTotalCents)} />
+              <Line
+                label="Livraison (un colis par vendeur)"
+                value={formatCents(c.shippingTotalCents)}
+              />
               <Line label="Total estimé" value={formatCents(c.totalCents)} strong />
               <AppText variant="small" color={colors.textSecondary}>
                 Montants définitifs calculés par SnapMarket à la création des commandes. Paiement

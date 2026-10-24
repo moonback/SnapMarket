@@ -9,6 +9,7 @@ import { CART_MAX_ITEMS, CartCheckoutSession, CartDto, CartItemDto } from '@snap
 import { AuthUser } from '../common/decorators/auth.decorators';
 import { CheckoutService } from '../orders/checkout.service';
 import { OrdersService } from '../orders/orders.service';
+import { bundleShippingFees } from '../orders/pricing';
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PRODUCT_SUMMARY_INCLUDE, ProductsService } from '../products/products.service';
@@ -29,6 +30,7 @@ type CartRow = Prisma.CartItemGetPayload<{ include: typeof CART_INCLUDE }>;
 /**
  * Panier : une ligne par annonce. Il ne réserve rien — la disponibilité et les prix sont
  * revérifiés au passage en paiement, qui crée une commande par ligne (paiement groupé).
+ * La livraison est regroupée par vendeur (un colis) : voir bundleShippingFees.
  * Les lignes payées sont retirées du panier à la confirmation du paiement.
  */
 @Injectable()
@@ -65,10 +67,16 @@ export class CartService {
       rows.map((r) => r.product),
       user,
     );
+    const shippingFees = bundleShippingFees(
+      rows.map((r) => ({
+        sellerId: r.product.sellerId,
+        feeCents: r.deliveryMode === 'SHIPPING' ? (r.product.shippingFeeCents ?? 0) : 0,
+      })),
+    );
     const items: CartItemDto[] = rows.map((row, i) => {
       const p = row.product;
       const available = Math.max(0, p.quantity - p.reservedQuantity);
-      const shipping = row.deliveryMode === 'SHIPPING' ? (p.shippingFeeCents ?? 0) : 0;
+      const shipping = shippingFees[i]!;
       return {
         product: summaries[i]!,
         quantity: row.quantity,
@@ -81,10 +89,7 @@ export class CartService {
       };
     });
     const itemsTotalCents = rows.reduce((s, r) => s + r.product.priceCents * r.quantity, 0);
-    const shippingTotalCents = rows.reduce(
-      (s, r) => s + (r.deliveryMode === 'SHIPPING' ? (r.product.shippingFeeCents ?? 0) : 0),
-      0,
-    );
+    const shippingTotalCents = shippingFees.reduce((s, f) => s + f, 0);
     return {
       items,
       itemsTotalCents,

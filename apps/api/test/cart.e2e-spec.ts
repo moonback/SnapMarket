@@ -99,6 +99,29 @@ describe('Panier et paiement groupé (e2e)', () => {
     await emptyCart(buyer);
   });
 
+  it('ne facture qu’un colis par vendeur, au montant de livraison le plus élevé', async () => {
+    const a1 = await createProduct(ctx, sellerA.id, { priceCents: 1000, shippingFeeCents: 490 });
+    const a2 = await createProduct(ctx, sellerA.id, { priceCents: 2000, shippingFeeCents: 690 });
+    await put(buyer, a1.id, { deliveryMode: 'SHIPPING' }).expect(200);
+    const cart = await put(buyer, a2.id, { deliveryMode: 'SHIPPING' }).expect(200);
+    expect(cart.body).toMatchObject({ shippingTotalCents: 690, totalCents: 3690 });
+
+    const res = await ctx.http
+      .post('/api/v1/cart/checkout')
+      .set(buyer.auth)
+      .send({ shippingAddress: ADDRESS })
+      .expect(201);
+    expect(res.body.checkout.totalCents).toBe(3690);
+    const orders = await ctx.prisma.order.findMany({
+      where: { checkoutId: res.body.checkout.id },
+    });
+    expect(Object.fromEntries(orders.map((o) => [o.productId, o.shippingFeeCents]))).toEqual({
+      [a1.id]: 0,
+      [a2.id]: 690,
+    });
+    await pay(res.body.checkout.id); // libère le paiement en attente pour les tests suivants
+  });
+
   it('crée une commande par annonce, réglées par un seul paiement, puis vide le panier', async () => {
     const a = await createProduct(ctx, sellerA.id, { priceCents: 2000, shippingFeeCents: 490 });
     const b = await createProduct(ctx, sellerB.id, {
