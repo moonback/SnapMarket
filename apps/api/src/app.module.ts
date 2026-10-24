@@ -4,6 +4,7 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import Redis from 'ioredis';
 import { AdminModule } from './admin/admin.module';
+import { CartModule } from './cart/cart.module';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { APP_CONFIG, AppConfig } from './config/configuration';
@@ -34,6 +35,7 @@ import { SellersModule } from './sellers/sellers.module';
     ReviewsModule,
     ReportsModule,
     SellersModule,
+    CartModule,
     AdminModule,
   ],
   providers: [

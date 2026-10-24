@@ -230,6 +230,8 @@ model User {
   status           UserStatus @default(ACTIVE)
   emailVerifiedAt  DateTime?
   termsAcceptedAt  DateTime?
+  /// Classement « Pour vous » du flux (signaux explicites uniquement). Désactivable.
+  personalizedFeed Boolean    @default(true)
   failedLoginCount Int        @default(0)
   /// Agrégats dénormalisés des avis visibles reçus (mis à jour en transaction).
   ratingCount      Int        @default(0)
@@ -257,6 +259,8 @@ model User {
   offersMade         Offer[]                   @relation("OfferBuyer")
   offersReceived     Offer[]                   @relation("OfferSeller")
   purchases          Order[]                   @relation("OrderBuyer")
+  checkouts          Checkout[]
+  cartItems          CartItem[]
   sales              Order[]                   @relation("OrderSeller")
   meetupsProposed    Meetup[]
   reviewsWritten     Review[]                  @relation("ReviewAuthor")
@@ -403,6 +407,7 @@ model Product {
   conversations Conversation[]
   offers        Offer[]
   orders        Order[]
+  cartItems     CartItem[]
 
   @@index([status, moderationStatus, publishedAt(sort: Desc), id])
   @@index([sellerId, status])
@@ -602,6 +607,8 @@ model Order {
   sellerId          String
   productId         String
   offerId           String?        @unique
+  /// Paiement groupé auquel appartient la commande (panier ou achat direct).
+  checkoutId        String
   quantity          Int            @default(1)
   deliveryMode      DeliveryMode
   status            OrderStatus    @default(PENDING_PAYMENT)
@@ -630,18 +637,54 @@ model Order {
   seller        User               @relation("OrderSeller", fields: [sellerId], references: [id])
   product       Product            @relation(fields: [productId], references: [id])
   offer         Offer?             @relation(fields: [offerId], references: [id])
-  payment       Payment?
+  checkout      Checkout           @relation(fields: [checkoutId], references: [id])
   statusEvents  OrderStatusEvent[]
   shipment      Shipment?
   meetups       Meetup[]
   reviews       Review[]
   dispute       Dispute?
   ledgerEntries LedgerEntry[]
-  paymentEvents PaymentEvent[]
 
   @@index([buyerId, createdAt])
   @@index([sellerId, createdAt])
   @@index([status, paymentExpiresAt])
+  @@index([checkoutId])
+}
+
+/// Regroupe les commandes réglées par un même paiement (une par annonce, éventuellement
+/// chez plusieurs vendeurs). Chaque commande garde son propre cycle de vie.
+model Checkout {
+  id               String    @id @default(cuid())
+  reference        String    @unique
+  buyerId          String
+  totalCents       Int
+  currency         String    @default("EUR")
+  paymentExpiresAt DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  buyer         User           @relation(fields: [buyerId], references: [id])
+  orders        Order[]
+  payment       Payment?
+  paymentEvents PaymentEvent[]
+
+  @@index([buyerId, createdAt])
+}
+
+/// Panier : un article par annonce, quantité et mode de remise choisis par l'acheteur.
+model CartItem {
+  userId       String
+  productId    String
+  quantity     Int           @default(1)
+  deliveryMode DeliveryMode?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([userId, productId])
+  @@index([productId])
 }
 
 model OrderStatusEvent {
@@ -662,7 +705,7 @@ model OrderStatusEvent {
 
 model Payment {
   id                      String        @id @default(cuid())
-  orderId                 String        @unique
+  checkoutId              String        @unique
   provider                String        @default("stripe")
   providerPaymentIntentId String        @unique
   latestChargeId          String?
@@ -673,7 +716,7 @@ model Payment {
   createdAt               DateTime      @default(now())
   updatedAt               DateTime      @updatedAt
 
-  order Order @relation(fields: [orderId], references: [id])
+  checkout Checkout @relation(fields: [checkoutId], references: [id])
 }
 
 /// Journal des événements reçus du prestataire (idempotence par providerEventId).
@@ -682,13 +725,13 @@ model PaymentEvent {
   provider        String    @default("stripe")
   providerEventId String    @unique
   type            String
-  orderId         String?
+  checkoutId      String?
   payload         Json
   processedAt     DateTime?
   error           String?
   createdAt       DateTime  @default(now())
 
-  order Order? @relation(fields: [orderId], references: [id])
+  checkout Checkout? @relation(fields: [checkoutId], references: [id])
 
   @@index([type, createdAt])
 }
@@ -765,7 +808,7 @@ model Dispute {
   details           String?
   status            DisputeStatus @default(OPEN)
   /// Identifiant de contestation bancaire Stripe (chargeback) le cas échéant.
-  providerDisputeId String?       @unique
+  providerDisputeId String?
   resolutionNote    String?
   resolvedById      String?
   resolvedAt        DateTime?
@@ -776,6 +819,7 @@ model Dispute {
   resolvedBy User? @relation("DisputeResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
 
   @@index([status])
+  @@index([providerDisputeId])
 }
 
 // ---------------------------------------------------------------------

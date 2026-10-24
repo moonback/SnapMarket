@@ -8,6 +8,10 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { APP_CONFIG, AppConfig } from '../config/configuration';
 
 export interface ObjectHead {
@@ -43,6 +47,11 @@ export class StorageService {
         region: c.region,
         endpoint: c.endpoint ?? undefined,
         forcePathStyle: c.forcePathStyle,
+        // Sommes de contrôle uniquement quand l'opération l'exige : évite l'encodage
+        // « aws-chunked » des envois en flux, mal pris en charge par certains stockages
+        // compatibles S3 (le fichier serait stocké avec son cadrage).
+        requestChecksumCalculation: 'WHEN_REQUIRED',
+        responseChecksumValidation: 'WHEN_REQUIRED',
         credentials: { accessKeyId: c.accessKeyId!, secretAccessKey: c.secretAccessKey! },
       });
     }
@@ -94,6 +103,27 @@ export class StorageService {
     );
     if (!res.Body) return Buffer.alloc(0);
     return Buffer.from(await res.Body.transformToByteArray());
+  }
+
+  /** Télécharge un objet vers un fichier temporaire (traitement vidéo du worker). */
+  async downloadToFile(key: string, path: string): Promise<void> {
+    const res = await this.s3().send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+    if (!res.Body) throw new Error(`Objet vide : ${key}`);
+    await pipeline(res.Body as Readable, createWriteStream(path));
+  }
+
+  async putFile(key: string, path: string, contentType: string): Promise<void> {
+    const { size } = await stat(path);
+    await this.s3().send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: createReadStream(path),
+        ContentLength: size,
+        ContentType: contentType,
+        CacheControl: 'public, max-age=31536000, immutable',
+      }),
+    );
   }
 
   async put(key: string, body: Buffer, contentType: string): Promise<void> {

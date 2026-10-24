@@ -36,9 +36,10 @@ describe('Commandes et paiements (e2e)', () => {
 
   let eventSeq = 0;
   async function paymentSucceeded(orderId: string, expected = 200, amount?: number) {
+    const { checkoutId } = await ctx.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
     const payment = await ctx.prisma.payment.findUniqueOrThrow({
-      where: { orderId },
-      include: { order: true },
+      where: { checkoutId },
+      include: { checkout: true },
     });
     return webhook({
       id: `evt_test_${++eventSeq}`,
@@ -48,7 +49,7 @@ describe('Commandes et paiements (e2e)', () => {
         object: {
           id: payment.providerPaymentIntentId,
           object: 'payment_intent',
-          amount_received: amount ?? payment.order.totalCents,
+          amount_received: amount ?? payment.checkout.totalCents,
           currency: 'eur',
           latest_charge: `ch_test_${eventSeq}`,
         },
@@ -92,7 +93,7 @@ describe('Commandes et paiements (e2e)', () => {
     const intent = ctx.stripe.fake.callsOf('paymentIntents.create').at(-1)!;
     expect((intent.args[0] as { amount: number }).amount).toBe(2490);
     expect((intent.args[1] as { idempotencyKey: string }).idempotencyKey).toBe(
-      `order-${ok.body.order.id}-payment-intent`,
+      `checkout-${ok.body.order.checkout.id}-payment-intent`,
     );
     const product = await ctx.prisma.product.findUniqueOrThrow({ where: { id: p.id } });
     expect(product.status).toBe('RESERVED');
@@ -184,7 +185,9 @@ describe('Commandes et paiements (e2e)', () => {
       // Aucun endpoint client ne permet de déclarer une commande payée.
       await ctx.http.post(`/api/v1/orders/${id}/confirm`).set(buyer.auth).expect(409);
 
-      const payment = await ctx.prisma.payment.findUniqueOrThrow({ where: { orderId: id } });
+      const payment = await ctx.prisma.payment.findUniqueOrThrow({
+        where: { checkoutId: created.body.order.checkout.id },
+      });
       const event = {
         id: 'evt_test_idempotent',
         object: 'event',
@@ -206,10 +209,10 @@ describe('Commandes et paiements (e2e)', () => {
 
       const o = await ctx.prisma.order.findUniqueOrThrow({
         where: { id },
-        include: { statusEvents: true, payment: true },
+        include: { statusEvents: true, checkout: { include: { payment: true } } },
       });
       expect(o.status).toBe('PAID');
-      expect(o.payment?.status).toBe('SUCCEEDED');
+      expect(o.checkout.payment?.status).toBe('SUCCEEDED');
       expect(o.statusEvents.filter((e) => e.to === 'PAID')).toHaveLength(1);
       expect(await ctx.prisma.ledgerEntry.count({ where: { orderId: id, type: 'CHARGE' } })).toBe(
         1,
@@ -297,7 +300,7 @@ describe('Commandes et paiements (e2e)', () => {
       await ctx.app.get(PaymentsService).payout(id); // idempotent
       const transfers = ctx.stripe.fake
         .callsOf('transfers.create')
-        .filter((c) => (c.args[0] as { transfer_group: string }).transfer_group === id);
+        .filter((c) => (c.args[0] as { metadata: { orderId: string } }).metadata.orderId === id);
       expect(transfers).toHaveLength(1);
       expect(transfers[0]!.args[0]).toMatchObject({
         amount: 3350,

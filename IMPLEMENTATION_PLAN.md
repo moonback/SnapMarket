@@ -44,9 +44,12 @@ Ce document suit l'avancement **réel**. Légende :
 - ✅ Catégories administrables (e2e)
 - ✅ Annonces : CRUD, brouillons, publication, archivage, suppression logique, propriété, recherche trigramme, filtres combinables, tri, pagination par curseur, catégories soumises à validation (e2e)
 - ✅ Favoris privés avec compteur (e2e)
-- ✅ Médias : URL présignées (type et taille signés), finalisation avec revérification, traitement worker (redimensionnement, suppression EXIF/GPS, miniature), vérification vidéo, nettoyage — e2e avec double de stockage + test unitaire sharp réel + **parcours réel contre un serveur S3 local (s3rver) avec l'API et le worker lancés**
+- ✅ Médias : URL présignées (type et taille signés), finalisation avec revérification, traitement worker (redimensionnement, suppression EXIF/GPS, miniature), nettoyage — e2e avec double de stockage + test unitaire sharp réel + **parcours réel contre un serveur S3 local (s3rver) avec l'API et le worker lancés**
+- ✅ Vidéos : durée réelle mesurée par ffprobe (refus > 60 s quelle que soit la durée déclarée), rotation, transcodage ffmpeg H.264/AAC sans métadonnées, image d'aperçu — tests sur vraies vidéos générées par ffmpeg + parcours réel API/worker/S3 local (fichier `.mov` de 4 s déclaré 20 s → MP4 H.264/AAC de 4 s, localisation supprimée)
 - ✅ Stories : création, expiration vérifiée à la lecture, vues (compteur réservé à l'auteur), suppression, lien vers annonce (e2e) ; nettoyage planifié implémenté
 - ✅ Flux : classement déterministe documenté, exclusion des comptes bloqués (e2e)
+- ✅ Flux « Pour vous » : signaux explicites (favoris, achats), avance fixe par signal, raisons exposées,
+  signaux consultables, désactivable ; pagination stable, filtres, injection SQL et repli testés (e2e)
 
 ### Lot 3 — Messagerie
 
@@ -64,6 +67,18 @@ Ce document suit l'avancement **réel**. Légende :
 - ✅ Paiement indisponible (503) sans configuration Stripe, sans réservation (e2e)
 - ✅ Offres : création, acceptation, refus, annulation, application unique du prix (e2e)
 - 🟡 Intégration Stripe réelle (PaymentIntent, Connect Express onboarding, transferts, refunds) — testée uniquement avec un double du client Stripe ; **nécessite des clés et la configuration Connect** pour être vérifiée
+
+### Lot 4 bis — Panier multi-articles
+
+- ✅ Panier (quantité, mode de remise, anomalies par ligne, limite de 20 articles) (e2e)
+- ✅ Paiement groupé : une commande par annonce et par vendeur, un seul PaymentIntent, réservation
+  tout-ou-rien, paniers concurrents sans double vente, annulation / expiration en bloc avant paiement (e2e)
+- ✅ Après paiement : remboursement partiel par commande, versement par vendeur depuis la même charge,
+  contestation bancaire appliquée à toutes les commandes, panier vidé des articles payés (e2e)
+- ✅ Migration non destructive (un Checkout créé par commande existante) — vérifiée sur une base contenant
+  commande, paiement et événement Stripe ; aucune dérive avec le schéma Prisma
+- 🟡 Écrans mobiles (panier, confirmation, ajout depuis l'annonce) — TypeScript, ESLint et bundle Android OK,
+  non exécutés sur appareil
 
 ### Lot 5 — Livraison & remise en main propre
 
@@ -97,7 +112,7 @@ Ce document suit l'avancement **réel**. Légende :
 
 ### Lot 10 — Qualité & livraison
 
-- ✅ 98 tests API (unitaires + e2e sur PostgreSQL et Redis réels), 5 tests shared, 7 tests mobile, 1 test admin
+- ✅ 114 tests API (unitaires + e2e sur PostgreSQL et Redis réels), 5 tests shared, 7 tests mobile, 1 test admin
 - 🟡 CI GitHub Actions (lint, format, types, tests unitaires, e2e avec services, builds, bundle Expo) — rédigée, pas encore exécutée sur GitHub
 - 🟡 Dockerfiles API/worker et admin — rédigés, non construits (pas de démon Docker)
 - ✅ README, SECURITY.md, `infrastructure/DEPLOYMENT.md`
@@ -106,9 +121,7 @@ Ce document suit l'avancement **réel**. Légende :
 
 - ⬜ Authentification sociale (Apple/Google) : table `AuthIdentity` prête, aucun flux actif.
 - ⬜ Intégration transporteur (Colissimo, Mondial Relay, Boxtal…) : saisie manuelle du suivi uniquement.
-- ⬜ Transcodage vidéo serveur et lecture de la durée réelle des vidéos (durée déclarée par le client).
-- ⬜ Classement personnalisé du flux.
-- ⬜ Panier multi-articles (le modèle retenu est une commande par annonce).
+- ⬜ Regroupement des frais de livraison de plusieurs annonces d'un même vendeur (un colis).
 - ⬜ Apple Pay / Google Pay (désactivés dans le plugin Stripe).
 - ⬜ Interface d'administration pour ajuster des listes de mots interdits (règles anti-spam codées et testées).
 - Actions externes nécessaires : compte Stripe + Connect + webhooks, bucket S3/CDN, SMTP, projet EAS

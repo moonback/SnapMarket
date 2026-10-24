@@ -7,7 +7,10 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import type {
+  CartDto,
   CategoryDto,
+  CheckoutDto,
+  FeedPersonalization,
   ConversationDto,
   MessageDto,
   NotificationDto,
@@ -37,7 +40,8 @@ export interface FeedFilters {
   conditions?: string[];
   deliveryMode?: 'SHIPPING' | 'MEETUP';
   department?: string;
-  sort?: 'recent' | 'price_asc' | 'price_desc';
+  /** Absent : « Pour vous » côté serveur (repli chronologique si désactivé). */
+  sort?: 'for_you' | 'recent' | 'price_asc' | 'price_desc';
 }
 
 const nextCursor = <T>(last: Paginated<T>) => last.nextCursor ?? undefined;
@@ -129,6 +133,51 @@ export function useToggleFavorite() {
     },
   });
 }
+
+export const usePersonalization = () =>
+  useQuery({
+    queryKey: ['personalization'],
+    queryFn: () => api.request<FeedPersonalization>('/feed/personalization'),
+  });
+
+export const useCart = () =>
+  useQuery({ queryKey: ['cart'], queryFn: () => api.request<CartDto>('/cart') });
+
+/** Ajout / modification d'une ligne du panier (quantité, mode de remise). */
+export function useCartItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      productId,
+      ...body
+    }: {
+      productId: string;
+      quantity?: number;
+      deliveryMode?: 'SHIPPING' | 'MEETUP';
+    }) => api.request<CartDto>(`/cart/items/${productId}`, { method: 'PUT', body }),
+    onSuccess: (cart) => qc.setQueryData(['cart'], cart),
+  });
+}
+
+export function useRemoveCartItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (productId: string) =>
+      api.request<CartDto>(`/cart/items/${productId}`, { method: 'DELETE' }),
+    onSuccess: (cart) => qc.setQueryData(['cart'], cart),
+  });
+}
+
+/** Paiement groupé ; interrogé périodiquement tant que la confirmation du prestataire est attendue. */
+export const useCheckout = (id: string, pollWhilePending: boolean) =>
+  useQuery({
+    queryKey: ['checkout', id],
+    queryFn: () => api.request<CheckoutDto>(`/checkouts/${id}`),
+    refetchInterval: (q) =>
+      pollWhilePending && q.state.data?.orders.some((o) => o.status === 'PENDING_PAYMENT')
+        ? 2500
+        : false,
+  });
 
 export const useStories = () =>
   useQuery({ queryKey: keys.stories, queryFn: () => api.request<StoryGroupDto[]>('/stories') });

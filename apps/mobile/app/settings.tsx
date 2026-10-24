@@ -1,7 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, ScrollView, View } from 'react-native';
+import { Alert, ScrollView, Switch, View } from 'react-native';
 import { MeUser, SellerSummary, updateProfileSchema } from '@snapmarket/shared';
 import {
   AppText,
@@ -13,6 +13,7 @@ import {
   Screen,
   TextField,
 } from '../src/components/ui';
+import { usePersonalization } from '../src/hooks/queries';
 import { api, ApiError } from '../src/services/api';
 import { pickFromLibrary, uploadAsset, waitUntilReady } from '../src/services/media';
 import { useAuth } from '../src/stores/auth';
@@ -30,6 +31,19 @@ export default function Settings() {
   const [newPassword, setNewPassword] = useState('');
   const [deletePassword, setDeletePassword] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  const personalization = usePersonalization();
+  const qc = useQueryClient();
+  const togglePersonalization = (value: boolean) =>
+    run('personalization', async () => {
+      setUser(
+        await api.request<MeUser>('/users/me', {
+          method: 'PATCH',
+          body: { personalizedFeed: value },
+        }),
+      );
+      void personalization.refetch();
+      void qc.invalidateQueries({ queryKey: ['feed'] });
+    });
   const blocked = useQuery({
     queryKey: ['blocks'],
     queryFn: () => api.request<SellerSummary[]>('/users/me/blocks'),
@@ -201,6 +215,32 @@ export default function Settings() {
             est un texte que vous choisissez. Les métadonnées de vos photos (dont la position GPS)
             sont supprimées lors du téléversement.
           </AppText>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+            <AppText variant="bodyStrong" style={{ flex: 1 }}>
+              Flux « Pour vous »
+            </AppText>
+            <Switch
+              value={me.personalizedFeed}
+              onValueChange={togglePersonalization}
+              disabled={busy === 'personalization'}
+              trackColor={{ true: colors.primary }}
+              accessibilityLabel="Flux personnalisé"
+            />
+          </View>
+          <AppText variant="caption" color={colors.textSecondary}>
+            Seuls vos favoris et vos achats terminés sont utilisés : les annonces des catégories et
+            marques correspondantes avancent de{' '}
+            {personalization.data?.boostHours.FAVORITE_CATEGORY ?? 48} h (catégorie) et{' '}
+            {personalization.data?.boostHours.FAVORITE_BRAND ?? 24} h (marque) dans le classement.
+            Aucun historique de navigation n’est utilisé.
+          </AppText>
+          {me.personalizedFeed && personalization.data && (
+            <AppText variant="caption" color={colors.textSecondary}>
+              Catégories :{' '}
+              {personalization.data.categories.map((c) => c.name).join(', ') || 'aucune'} · Marques
+              : {personalization.data.brands.join(', ') || 'aucune'}
+            </AppText>
+          )}
           <AppText variant="bodyStrong">Utilisateurs bloqués</AppText>
           {(blocked.data ?? []).length === 0 && (
             <AppText color={colors.textSecondary}>Aucun</AppText>

@@ -52,6 +52,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: ffmpeg (transcodage vidéo)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: npm ci
       - run: npm test -w @snapmarket/api
 

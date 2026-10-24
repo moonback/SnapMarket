@@ -73,6 +73,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             </dd>
             <dt>Paiement</dt>
             <dd>{o.paymentStatus ? <Badge value={o.paymentStatus} /> : '—'}</dd>
+            <dt>Paiement groupé</dt>
+            <dd>
+              {o.checkout.reference} — {o.checkout.orderCount} commande(s),{' '}
+              <Money cents={o.checkout.totalCents} /> au total
+            </dd>
             <dt>Transfert</dt>
             <dd>
               <Badge value={o.transferStatus} />

@@ -57,6 +57,13 @@ export function ProductCard({ product, width }: { product: ProductSummary; width
         <AppText variant="small" color={colors.textSecondary} numberOfLines={1}>
           {[product.brand, PRODUCT_CONDITION_LABELS[product.condition]].filter(Boolean).join(' · ')}
         </AppText>
+        {product.matchReasons && product.matchReasons.length > 0 && (
+          <AppText variant="small" color={colors.primaryLight} numberOfLines={1}>
+            {product.matchReasons.includes('FAVORITE_BRAND')
+              ? 'Marque que vous aimez'
+              : 'Catégorie que vous aimez'}
+          </AppText>
+        )}
       </View>
     </Pressable>
   );

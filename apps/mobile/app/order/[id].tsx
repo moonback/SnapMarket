@@ -151,6 +151,12 @@ export default function OrderScreen() {
         {waiting && (
           <Notice tone="primary" text="Paiement en cours de confirmation par le prestataire…" />
         )}
+        {o.checkout.orderCount > 1 && (
+          <Notice
+            tone="primary"
+            text={`Paiement groupé ${o.checkout.reference} : ${o.checkout.orderCount} commandes réglées ensemble (${formatCents(o.checkout.totalCents)}). Chaque commande est suivie séparément.`}
+          />
+        )}
         <Card>
           <View
             style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}

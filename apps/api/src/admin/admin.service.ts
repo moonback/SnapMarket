@@ -460,7 +460,15 @@ export class AdminService {
           buyer: { select: { id: true, username: true } },
           seller: { select: { id: true, username: true } },
           product: { select: { id: true, title: true } },
-          payment: { select: { status: true, providerPaymentIntentId: true, refundedCents: true } },
+          checkout: {
+            select: {
+              reference: true,
+              _count: { select: { orders: true } },
+              payment: {
+                select: { status: true, providerPaymentIntentId: true, refundedCents: true },
+              },
+            },
+          },
         },
       }),
       this.prisma.order.count({ where }),
@@ -477,7 +485,8 @@ export class AdminService {
         totalCents: o.totalCents,
         commissionCents: o.commissionCents,
         transferStatus: o.transferStatus,
-        payment: o.payment,
+        payment: o.checkout.payment,
+        checkout: { reference: o.checkout.reference, orderCount: o.checkout._count.orders },
         buyer: o.buyer,
         seller: o.seller,
         product: o.product,
@@ -490,8 +499,9 @@ export class AdminService {
     const order = await this.orders.get(actor, id);
     const [ledger, events] = await Promise.all([
       this.prisma.ledgerEntry.findMany({ where: { orderId: id }, orderBy: { createdAt: 'asc' } }),
+      // Événements du paiement groupé auquel appartient la commande.
       this.prisma.paymentEvent.findMany({
-        where: { orderId: id },
+        where: { checkoutId: order.checkout.id },
         orderBy: { createdAt: 'asc' },
         select: {
           id: true,

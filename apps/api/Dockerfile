@@ -17,7 +17,8 @@ RUN npm prune --omit=dev --workspace @snapmarket/api --workspace @snapmarket/sha
 FROM node:22-bookworm-slim
 ENV NODE_ENV=production
 WORKDIR /repo
-RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/* \
+# ffmpeg/ffprobe : transcodage vidéo et mesure de la durée réelle (worker).
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ffmpeg && rm -rf /var/lib/apt/lists/* \
   && groupadd -r app && useradd -r -g app app
 COPY --from=build /repo/node_modules node_modules
 COPY --from=build /repo/package.json ./

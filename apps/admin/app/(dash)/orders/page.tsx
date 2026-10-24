@@ -12,6 +12,7 @@ interface Row {
   commissionCents: number;
   transferStatus: string;
   payment: { status: string; refundedCents: number } | null;
+  checkout: { reference: string; orderCount: number };
   buyer: { id: string; username: string };
   seller: { id: string; username: string };
   product: { id: string; title: string };
@@ -70,6 +71,14 @@ export default async function OrdersPage({
                   <Link href={`/orders/${o.id}`}>{o.reference}</Link>
                   <br />
                   <DateTime value={o.createdAt} />
+                  {o.checkout.orderCount > 1 && (
+                    <>
+                      <br />
+                      <span className="muted">
+                        Paiement groupé {o.checkout.reference} ({o.checkout.orderCount} commandes)
+                      </span>
+                    </>
+                  )}
                 </td>
                 <td>
                   {o.product.title}

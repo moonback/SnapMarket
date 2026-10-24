@@ -52,6 +52,8 @@ export interface MediaDto {
   thumbnailUrl: string | null;
   width: number | null;
   height: number | null;
+  /** Durée réelle mesurée par le serveur (vidéos), en secondes. */
+  durationSeconds: number | null;
 }
 
 export interface RatingSummary {
@@ -81,6 +83,7 @@ export interface MeUser extends PublicUser {
   role: UserRole;
   status: UserStatus;
   seller: SellerProfileDto | null;
+  personalizedFeed: boolean;
 }
 
 export interface SellerProfileDto {
@@ -128,6 +131,19 @@ export interface ProductSummary {
   isFavorite: boolean;
   favoritesCount: number;
   createdAt: string;
+  /** Raisons explicites de mise en avant dans le flux « Pour vous » (vide sinon). */
+  matchReasons?: FeedMatchReason[];
+}
+
+export type FeedMatchReason = 'FAVORITE_CATEGORY' | 'FAVORITE_BRAND';
+
+/** Signaux utilisés pour le flux « Pour vous », exposés à l'utilisateur. */
+export interface FeedPersonalization {
+  enabled: boolean;
+  categories: { id: string; name: string }[];
+  brands: string[];
+  /** Avance accordée dans le classement, en heures, par type de signal. */
+  boostHours: Record<FeedMatchReason, number>;
 }
 
 export interface ProductDetail extends ProductSummary {
@@ -265,6 +281,8 @@ export interface OrderDto {
   allowedTransitions: OrderStatus[];
   canReview: boolean;
   dispute: { id: string; status: DisputeStatus; reason: string } | null;
+  /** Paiement groupé dont fait partie la commande. */
+  checkout: { id: string; reference: string; orderCount: number; totalCents: number };
   createdAt: string;
   updatedAt: string;
 }
@@ -274,6 +292,45 @@ export interface CheckoutSession {
   /** client_secret Stripe du PaymentIntent à confirmer avec le SDK Stripe. */
   paymentClientSecret: string;
   publishableKeyRequired: true;
+}
+
+export interface CheckoutDto {
+  id: string;
+  reference: string;
+  totalCents: number;
+  paymentStatus: PaymentStatus | null;
+  orders: OrderDto[];
+  createdAt: string;
+}
+
+/** Paiement groupé créé depuis le panier (une commande par annonce). */
+export interface CartCheckoutSession {
+  checkout: CheckoutDto;
+  paymentClientSecret: string;
+}
+
+export interface CartItemDto {
+  product: ProductSummary;
+  quantity: number;
+  availableQuantity: number;
+  deliveryMode: DeliveryMode | null;
+  /** Modes proposés par le vendeur pour cette annonce. */
+  deliveryModes: DeliveryMode[];
+  shippingFeeCents: number | null;
+  /** Prix des articles de la ligne (prix unitaire × quantité), estimation avant commande. */
+  lineItemCents: number;
+  /** Motif empêchant l'achat de la ligne (indisponible, vendeur non prêt…), sinon null. */
+  issue: string | null;
+}
+
+export interface CartDto {
+  items: CartItemDto[];
+  /** Estimations ; les montants définitifs sont calculés à la création des commandes. */
+  itemsTotalCents: number;
+  shippingTotalCents: number;
+  totalCents: number;
+  sellerCount: number;
+  ready: boolean;
 }
 
 export interface ReviewDto {
