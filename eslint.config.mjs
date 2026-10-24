@@ -2,6 +2,7 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
 import globals from 'globals';
+import reactHooks from 'eslint-plugin-react-hooks';
 
 export default tseslint.config(
   {
@@ -13,6 +14,8 @@ export default tseslint.config(
       '**/coverage/**',
       'apps/mobile/ios/**',
       'apps/mobile/android/**',
+      'apps/mobile/app.config.ts',
+      'apps/mobile/expo-env.d.ts',
       '**/*.config.js',
       '**/babel.config.js',
       '**/metro.config.js',
@@ -24,7 +27,10 @@ export default tseslint.config(
   {
     languageOptions: { globals: { ...globals.node } },
     rules: {
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
       '@typescript-eslint/consistent-type-imports': 'off',
       'no-console': ['warn', { allow: ['warn', 'error'] }],
     },
@@ -32,6 +38,11 @@ export default tseslint.config(
   {
     files: ['apps/mobile/**/*.{ts,tsx}', 'apps/admin/**/*.{ts,tsx}'],
     languageOptions: { globals: { ...globals.browser } },
+    plugins: { 'react-hooks': reactHooks },
+    rules: {
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
+    },
   },
   {
     files: ['prisma/**/*.ts', '**/test/**/*.ts', '**/*.spec.ts', '**/*.test.ts'],
