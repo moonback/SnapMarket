@@ -83,15 +83,21 @@ Documentation interactive : `GET /api/docs` (désactivée en production sauf `EN
 État des intégrations : `GET /api/v1/status` (utilisé par les clients pour désactiver honnêtement
 les fonctions non configurées).
 
-### Classement du flux « Découvrir » (v1, déterministe)
+### Classement du flux « Découvrir »
 
 1. Annonces publiquement visibles uniquement (actives ou réservées, non modérées, vendeur actif).
 2. Exclusion de ses propres annonces et des comptes bloqués (dans les deux sens).
 3. Application des filtres explicites : texte (titre, marque — index trigramme), catégorie, prix, état,
    mode de remise, département, vendeur.
-4. Tri par date de publication décroissante puis identifiant (pagination par curseur stable), ou par prix.
+4. Tri **« Pour vous »** par défaut pour un utilisateur connecté (`apps/api/src/feed/personalization.service.ts`),
+   sinon chronologique ; tri par prix sur demande.
 
-Aucun profilage comportemental n'est utilisé.
+**« Pour vous »** n'utilise que des actions explicites : catégories des favoris et des achats terminés,
+marques des favoris (5 de chaque au plus). Score = date de publication + avance fixe : **+48 h** si la
+catégorie correspond, **+24 h** si la marque correspond. Le score ne dépend pas de l'heure de la requête
+(pagination par curseur stable) et chaque annonce mise en avant porte ses raisons (`matchReasons`).
+`GET /api/v1/feed/personalization` expose les signaux ; la préférence `personalizedFeed` (paramètres du
+compte) désactive la personnalisation. Aucun historique de navigation ni donnée tierce n'est utilisé.
 
 ## Commandes, paiements et commission
 
@@ -109,6 +115,16 @@ PENDING_PAYMENT ─▶ CANCELLED (acheteur, vendeur, expiration 30 min)
 PAID / PREPARING / READY_FOR_HANDOFF ─(vendeur ou admin)─▶ REFUNDED
 PAID / PREPARING / SHIPPED / READY_FOR_HANDOFF ─(acheteur ou contestation bancaire)─▶ DISPUTED ─(admin)─▶ COMPLETED | REFUNDED
 ```
+
+**Panier et paiement groupé** : le panier (une ligne par annonce, quantité et mode de remise) ne réserve
+rien. Au paiement, un **Checkout** crée **une commande par annonce** — éventuellement chez plusieurs
+vendeurs — réglées par **un seul PaymentIntent** (`transfer_group` = Checkout). La réservation du stock est
+tout-ou-rien. Chaque commande garde son propre cycle de vie : expédition ou rendez-vous, versement au
+vendeur (Transfer depuis la même charge), remboursement (Refund **partiel** du montant de la commande) et
+litige. Avant paiement, l'annulation (acheteur, vendeur, expiration) porte sur tout le Checkout, pour que le
+montant du paiement reste égal à la somme des commandes. Une contestation bancaire concerne toutes les
+commandes du paiement. Les frais de livraison restent ceux de chaque annonce (pas de regroupement de colis).
+Les articles payés quittent le panier à la confirmation du paiement.
 
 Aucune commande n'est terminée automatiquement : ni à l'heure d'un rendez-vous, ni après un délai d'expédition.
 Le client ne peut jamais déclarer une commande payée : seul le webhook `payment_intent.succeeded` signé,
@@ -168,8 +184,11 @@ factice clairement identifié ; la vérification de signature y est réelle.
 Téléversement direct vers le stockage S3 via URL PUT présignée (type et taille signés, 5 min), finalisation
 par l'API (vérification de la taille et du type réels), puis traitement asynchrone : vérification du contenu,
 réorientation, redimensionnement (2048 px), **suppression des métadonnées EXIF dont la position GPS**,
-miniature WebP. Les vidéos (stories/annonces, ≤ 50 Mo, ≤ 60 s déclarées) sont vérifiées (signature MP4/MOV)
-mais **non transcodées**. Les médias de messagerie restent privés (URL signées) ; les médias publics peuvent
+miniature WebP. Les vidéos (stories/annonces, ≤ 50 Mo) sont analysées par **ffprobe** : la **durée réelle**
+fait foi (refus au-delà de 60 s, quelle que soit la durée déclarée), puis **transcodées par ffmpeg** en MP4
+H.264/AAC (1280 px max, lecture progressive) sans aucune métadonnée (dont la localisation des vidéos de
+téléphone), avec image d'aperçu WebP. Le worker a besoin de `ffmpeg`/`ffprobe` (installés dans l'image Docker,
+chemins configurables par `FFMPEG_PATH` / `FFPROBE_PATH`). Les médias de messagerie restent privés (URL signées) ; les médias publics peuvent
 être servis par un CDN (`MEDIA_CDN_URL`). Suppression des objets à la suppression des contenus, des stories
 expirées et des téléversements abandonnés.
 
@@ -189,5 +208,4 @@ jamais par l'API : uniquement par `npm run admin:create` (accès direct à la ba
 ## Limites connues
 
 Voir la section « Restant » de [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) : authentification sociale,
-intégration transporteur, transcodage vidéo, classement personnalisé et paiement réel (clés Stripe) ne sont
-pas actifs ; l'application mobile n'a pas été testée sur appareil dans ce dépôt.
+intégration transporteur et paiement réel (clés Stripe) ne sont pas actifs ; l'application mobile n'a pas été testée sur appareil dans ce dépôt.

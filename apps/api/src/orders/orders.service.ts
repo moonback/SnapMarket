@@ -1,40 +1,29 @@
 import {
-  BadGatewayException,
-  BadRequestException,
   ConflictException,
   ForbiddenException,
-  HttpException,
-  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
-  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Order, Prisma } from '@prisma/client';
 import {
   AddressDto as AddressContract,
   allowedOrderTransitions,
+  CheckoutDto,
   CheckoutSession,
   OrderActor,
   OrderDto,
   Paginated,
-  PENDING_PAYMENT_EXPIRY_MINUTES,
 } from '@snapmarket/shared';
-import { AuditService } from '../audit/audit.service';
 import { AuthUser } from '../common/decorators/auth.decorators';
-import { orderReference } from '../common/utils/crypto';
 import { decodeCursor, pageSize, paginate } from '../common/utils/pagination';
 import { MediaService } from '../media/media.service';
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { SettingsService } from '../settings/settings.service';
 import { USER_SUMMARY_INCLUDE, UserPresenter } from '../users/user-presenter.service';
-import { UsersService } from '../users/users.service';
 import { CreateOrderDto, DisputeDto, ListOrdersDto, ShipOrderDto } from './dto/order.dto';
-import { OrderStateService, reserveStock } from './order-state.service';
-import { computeOrderPricing } from './pricing';
-
-const MAX_PENDING_ORDERS_PER_BUYER = 5;
+import { CheckoutService } from './checkout.service';
+import { OrderStateService } from './order-state.service';
 
 export const ORDER_INCLUDE = {
   buyer: { include: USER_SUMMARY_INCLUDE },
@@ -44,7 +33,7 @@ export const ORDER_INCLUDE = {
       media: { include: { media: true }, orderBy: { position: 'asc' as const }, take: 1 },
     },
   },
-  payment: true,
+  checkout: { include: { payment: true, _count: { select: { orders: true } } } },
   shipment: { include: { events: { orderBy: { createdAt: 'asc' as const } } } },
   meetups: { orderBy: { createdAt: 'desc' as const } },
   statusEvents: { orderBy: { createdAt: 'asc' as const } },
@@ -62,159 +51,30 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly payments: PaymentsService,
     private readonly state: OrderStateService,
-    private readonly settings: SettingsService,
-    private readonly users: UsersService,
     private readonly presenter: UserPresenter,
     private readonly media: MediaService,
-    private readonly audit: AuditService,
+    private readonly checkouts: CheckoutService,
   ) {}
 
   // ------------------------------------------------------------------
   // Création et paiement
   // ------------------------------------------------------------------
 
+  /** Achat direct d'une annonce : paiement groupé d'une seule commande. */
   async create(user: AuthUser, dto: CreateOrderDto): Promise<CheckoutSession> {
-    if (!this.payments.available) {
-      throw new ServiceUnavailableException({
-        message: 'Le paiement en ligne n’est pas encore disponible',
-        code: 'PAYMENTS_UNAVAILABLE',
-      });
-    }
-    // Le vendeur et le prix sont toujours déterminés côté serveur à partir de l'annonce.
-    const product = await this.prisma.product.findUnique({
-      where: { id: dto.productId },
-      include: { seller: { include: { sellerProfile: true } } },
-    });
-    if (!product || product.deletedAt) throw new NotFoundException('Annonce introuvable');
-    if (product.sellerId === user.id)
-      throw new BadRequestException('Vous ne pouvez pas acheter votre propre annonce');
-    if (product.seller.status !== 'ACTIVE')
-      throw new ConflictException('Ce vendeur n’est plus actif');
-    if (await this.users.isBlockedBetween(user.id, product.sellerId)) {
-      throw new ForbiddenException('Achat impossible auprès de ce vendeur');
-    }
-    if (!product.deliveryModes.includes(dto.deliveryMode)) {
-      throw new BadRequestException('Mode de livraison non proposé pour cette annonce');
-    }
-    if (dto.deliveryMode === 'SHIPPING' && !dto.shippingAddress) {
-      throw new BadRequestException('Adresse de livraison requise');
-    }
-    if (
-      !product.seller.sellerProfile?.stripePayoutsEnabled ||
-      !product.seller.sellerProfile.stripeAccountId
-    ) {
-      throw new ConflictException({
-        message: 'Le vendeur n’a pas encore activé la réception des paiements',
-        code: 'SELLER_PAYOUTS_NOT_READY',
-      });
-    }
-    const pending = await this.prisma.order.count({
-      where: { buyerId: user.id, status: 'PENDING_PAYMENT' },
-    });
-    if (pending >= MAX_PENDING_ORDERS_PER_BUYER) {
-      throw new HttpException(
-        'Trop de commandes en attente de paiement',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
-    let quantity = dto.quantity ?? 1;
-    let unitPriceCents = product.priceCents;
-    if (dto.offerId) {
-      const offer = await this.prisma.offer.findUnique({ where: { id: dto.offerId } });
-      if (
-        !offer ||
-        offer.buyerId !== user.id ||
-        offer.productId !== product.id ||
-        offer.status !== 'ACCEPTED' ||
-        (offer.expiresAt && offer.expiresAt < new Date())
-      ) {
-        throw new BadRequestException('Offre invalide ou expirée');
-      }
-      quantity = 1;
-      unitPriceCents = offer.amountCents;
-    }
-    const { commissionBps } = await this.settings.get();
-    const pricing = computeOrderPricing({
-      unitPriceCents,
-      quantity,
-      shippingFeeCents: dto.deliveryMode === 'SHIPPING' ? (product.shippingFeeCents ?? 0) : 0,
-      commissionBps,
-    });
-
-    const order = await this.prisma.$transaction(async (tx) => {
-      if (!(await reserveStock(tx, product.id, quantity))) {
-        throw new ConflictException({
-          message: 'Cet article n’est plus disponible',
-          code: 'PRODUCT_UNAVAILABLE',
-        });
-      }
-      if (dto.offerId) {
-        const used = await tx.offer.updateMany({
-          where: { id: dto.offerId, status: 'ACCEPTED' },
-          data: { status: 'USED' },
-        });
-        if (used.count !== 1) throw new ConflictException('Offre déjà utilisée');
-      }
-      const created = await tx.order.create({
-        data: {
-          reference: orderReference(),
-          buyerId: user.id,
-          sellerId: product.sellerId,
-          productId: product.id,
-          offerId: dto.offerId ?? null,
-          quantity,
-          deliveryMode: dto.deliveryMode,
-          unitPriceCents,
-          itemPriceCents: pricing.itemPriceCents,
-          shippingFeeCents: pricing.shippingFeeCents,
-          totalCents: pricing.totalCents,
-          commissionBps: pricing.commissionBps,
-          commissionCents: pricing.commissionCents,
-          sellerPayoutCents: pricing.sellerPayoutCents,
-          shippingAddress:
-            dto.deliveryMode === 'SHIPPING'
-              ? (dto.shippingAddress as unknown as Prisma.InputJsonValue)
-              : Prisma.JsonNull,
-          paymentExpiresAt: new Date(Date.now() + PENDING_PAYMENT_EXPIRY_MINUTES * 60_000),
-        },
-      });
-      await tx.orderStatusEvent.create({
-        data: {
-          orderId: created.id,
-          from: null,
-          to: 'PENDING_PAYMENT',
-          actorType: 'BUYER',
-          actorId: user.id,
-        },
-      });
-      await this.audit.log(
+    const { checkout, clientSecret } = await this.checkouts.create(
+      user,
+      [
         {
-          actorId: user.id,
-          action: 'order.create',
-          entityType: 'Order',
-          entityId: created.id,
-          metadata: { ...pricing, quantity },
+          productId: dto.productId,
+          quantity: dto.quantity ?? 1,
+          deliveryMode: dto.deliveryMode,
+          offerId: dto.offerId,
         },
-        tx,
-      );
-      return created;
-    });
-
-    let clientSecret: string;
-    try {
-      clientSecret = await this.payments.createPaymentIntent(order);
-    } catch (e) {
-      this.logger.error(`Création du paiement impossible pour ${order.id} : ${String(e)}`);
-      await this.state.transition({
-        orderId: order.id,
-        to: 'CANCELLED',
-        actor: 'SYSTEM',
-        actorId: null,
-        note: 'Échec de l’initialisation du paiement',
-      });
-      throw new BadGatewayException('Le paiement n’a pas pu être initialisé, réessayez plus tard');
-    }
+      ],
+      dto.shippingAddress,
+    );
+    const order = await this.prisma.order.findFirstOrThrow({ where: { checkoutId: checkout.id } });
     return {
       order: await this.get(user, order.id),
       paymentClientSecret: clientSecret,
@@ -227,7 +87,8 @@ export class OrdersService {
     if (order.buyerId !== user.id) throw new ForbiddenException('Accès refusé');
     if (order.status !== 'PENDING_PAYMENT')
       throw new ConflictException('Cette commande n’attend plus de paiement');
-    const clientSecret = await this.payments.clientSecret(order.id);
+    // Le paiement couvre toutes les commandes du paiement groupé (cf. order.checkout).
+    const clientSecret = await this.payments.clientSecret(order.checkoutId);
     return {
       order: await this.toDto(order, user),
       paymentClientSecret: clientSecret,
@@ -277,14 +138,23 @@ export class OrdersService {
     const order = await this.loadFor(user, id);
     const actor = this.actorOf(order, user);
     if (order.status === 'PENDING_PAYMENT') {
-      await this.payments.cancelPaymentIntent(order.id);
+      // Avant paiement, tout le paiement groupé est annulé (le montant du paiement reste cohérent).
+      await this.payments.cancelPaymentIntent(order.checkoutId);
       await this.state.transition({
         orderId: order.id,
         to: 'CANCELLED',
         actor,
         actorId: user.id,
         note: reason,
+        expectedFrom: 'PENDING_PAYMENT',
       });
+      await this.checkouts.cancelPending(
+        order.checkoutId,
+        'SYSTEM',
+        null,
+        'Annulation d’une autre commande du même paiement',
+        false,
+      );
     } else if (['PAID', 'PREPARING', 'READY_FOR_HANDOFF'].includes(order.status)) {
       if (actor === 'BUYER') {
         throw new ForbiddenException(
@@ -445,27 +315,44 @@ export class OrdersService {
   async expireUnpaid(now = new Date()): Promise<number> {
     const expired = await this.prisma.order.findMany({
       where: { status: 'PENDING_PAYMENT', paymentExpiresAt: { lt: now } },
-      select: { id: true },
+      select: { checkoutId: true },
+      distinct: ['checkoutId'],
       take: 200,
     });
     let count = 0;
-    for (const { id } of expired) {
+    for (const { checkoutId } of expired) {
       try {
-        await this.payments.cancelPaymentIntent(id);
-        await this.state.transition({
-          orderId: id,
-          to: 'CANCELLED',
-          actor: 'SYSTEM',
-          actorId: null,
-          note: 'Délai de paiement dépassé',
-          expectedFrom: 'PENDING_PAYMENT',
-        });
-        count++;
+        count += await this.checkouts.cancelPending(
+          checkoutId,
+          'SYSTEM',
+          null,
+          'Délai de paiement dépassé',
+        );
       } catch (e) {
-        this.logger.warn(`Expiration de la commande ${id} impossible : ${String(e)}`);
+        this.logger.warn(`Expiration du paiement ${checkoutId} impossible : ${String(e)}`);
       }
     }
     return count;
+  }
+
+  /** Paiement groupé et ses commandes (acheteur ou équipe). */
+  async checkoutDto(user: AuthUser, checkoutId: string): Promise<CheckoutDto> {
+    const checkout = await this.prisma.checkout.findUnique({
+      where: { id: checkoutId },
+      include: { payment: true, orders: { include: ORDER_INCLUDE, orderBy: { createdAt: 'asc' } } },
+    });
+    const staff = user.role === 'ADMIN' || user.role === 'MODERATOR';
+    if (!checkout || (checkout.buyerId !== user.id && !staff)) {
+      throw new NotFoundException('Paiement introuvable');
+    }
+    return {
+      id: checkout.id,
+      reference: checkout.reference,
+      totalCents: checkout.totalCents,
+      paymentStatus: checkout.payment?.status ?? null,
+      orders: await Promise.all(checkout.orders.map((o) => this.toDto(o, user))),
+      createdAt: checkout.createdAt.toISOString(),
+    };
   }
 
   // ------------------------------------------------------------------
@@ -521,7 +408,7 @@ export class OrdersService {
         commissionBps: o.commissionBps,
         sellerPayoutCents: o.sellerPayoutCents,
       },
-      paymentStatus: o.payment?.status ?? null,
+      paymentStatus: o.checkout.payment?.status ?? null,
       transferStatus: o.transferStatus,
       shippingAddress: address
         ? {
@@ -571,6 +458,12 @@ export class OrdersService {
       dispute: o.dispute
         ? { id: o.dispute.id, status: o.dispute.status, reason: o.dispute.reason }
         : null,
+      checkout: {
+        id: o.checkout.id,
+        reference: o.checkout.reference,
+        orderCount: o.checkout._count.orders,
+        totalCents: o.checkout.totalCents,
+      },
       createdAt: o.createdAt.toISOString(),
       updatedAt: o.updatedAt.toISOString(),
     };

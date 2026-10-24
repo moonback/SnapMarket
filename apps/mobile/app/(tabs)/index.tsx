@@ -15,7 +15,7 @@ import { FiltersModal } from '../../src/components/FiltersModal';
 import { ProductCard } from '../../src/components/ProductCard';
 import { StoriesBar } from '../../src/components/StoriesBar';
 import { AppText, Chip, EmptyView, ErrorView, LoadingView, Screen } from '../../src/components/ui';
-import { FeedFilters, flatten, useCategories, useFeed } from '../../src/hooks/queries';
+import { FeedFilters, flatten, useCart, useCategories, useFeed } from '../../src/hooks/queries';
 import { colors, MIN_TOUCH, radius, spacing } from '../../src/theme/tokens';
 
 export default function Discover() {
@@ -24,6 +24,8 @@ export default function Discover() {
   const [filters, setFilters] = useState<FeedFilters>({});
   const [showFilters, setShowFilters] = useState(false);
   const categories = useCategories();
+  const cart = useCart();
+  const cartCount = cart.data?.items.length ?? 0;
   const feed = useFeed(filters);
   const items = useMemo(() => flatten(feed.data), [feed.data]);
   const cardWidth = (width - spacing.lg * 2 - spacing.md) / 2;
@@ -40,14 +42,29 @@ export default function Discover() {
     <Screen>
       <View style={styles.top}>
         <AppText variant="title">Découvrir</AppText>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Notifications"
-          onPress={() => router.push('/notifications')}
-          style={styles.iconBtn}
-        >
-          <Ionicons name="notifications-outline" size={24} color={colors.text} />
-        </Pressable>
+        <View style={{ flexDirection: 'row' }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Panier${cartCount ? `, ${cartCount} articles` : ''}`}
+            onPress={() => router.push('/cart')}
+            style={styles.iconBtn}
+          >
+            <Ionicons name="bag-outline" size={24} color={colors.text} />
+            {cartCount > 0 && (
+              <View style={styles.badge}>
+                <AppText variant="small">{cartCount}</AppText>
+              </View>
+            )}
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Notifications"
+            onPress={() => router.push('/notifications')}
+            style={styles.iconBtn}
+          >
+            <Ionicons name="notifications-outline" size={24} color={colors.text} />
+          </Pressable>
+        </View>
       </View>
       <View style={styles.searchRow}>
         <View style={styles.search}>
@@ -160,6 +177,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
+  },
+  badge: {
+    position: 'absolute',
+    top: 4,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   iconBtn: { width: MIN_TOUCH, height: MIN_TOUCH, alignItems: 'center', justifyContent: 'center' },
   searchRow: {

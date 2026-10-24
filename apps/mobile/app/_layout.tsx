@@ -67,6 +67,8 @@ export default function RootLayout() {
                     options={{ animation: 'fade', presentation: 'fullScreenModal' }}
                   />
                   <Stack.Screen name="orders" />
+                  <Stack.Screen name="cart" />
+                  <Stack.Screen name="checkout-done/[id]" />
                   <Stack.Screen name="notifications" />
                   <Stack.Screen name="settings" />
                   <Stack.Screen name="seller" />

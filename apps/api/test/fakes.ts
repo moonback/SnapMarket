@@ -53,7 +53,7 @@ export class FakeStripeClient {
   refunds = {
     create: async (params: Stripe.RefundCreateParams, opts?: Stripe.RequestOptions) => {
       this.record('refunds.create', [params, opts]);
-      return { id: this.id('re'), amount: 0, status: 'succeeded' };
+      return { id: this.id('re'), amount: params.amount ?? 0, status: 'succeeded' };
     },
   };
 

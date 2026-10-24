@@ -48,3 +48,6 @@ export type AllowedMimeType = (typeof ALLOWED_MIME_TYPES)[number];
 export const OFFER_ACCEPTED_VALIDITY_HOURS = 48;
 /** Délai avant annulation automatique d'une commande non payée. */
 export const PENDING_PAYMENT_EXPIRY_MINUTES = 30;
+
+/** Nombre maximal d'annonces différentes dans un panier / un paiement groupé. */
+export const CART_MAX_ITEMS = 20;

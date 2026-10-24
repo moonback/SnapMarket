@@ -36,7 +36,13 @@ import {
   Rating,
   TextField,
 } from '../../src/components/ui';
-import { keys, useOffers, useProduct, useToggleFavorite } from '../../src/hooks/queries';
+import {
+  keys,
+  useCartItem,
+  useOffers,
+  useProduct,
+  useToggleFavorite,
+} from '../../src/hooks/queries';
 import { api, ApiError } from '../../src/services/api';
 import { colors, MIN_TOUCH, radius, spacing } from '../../src/theme/tokens';
 import { relativeTime } from '../../src/utils/format';
@@ -115,6 +121,7 @@ export default function ProductScreen() {
   const qc = useQueryClient();
   const product = useProduct(id);
   const toggleFav = useToggleFavorite();
+  const addToCart = useCartItem();
   const myOffers = useOffers('buyer', id);
   const [page, setPage] = useState(0);
   const [reportOpen, setReportOpen] = useState(false);
@@ -323,6 +330,30 @@ export default function ProductScreen() {
 
       {!p.isOwner && (
         <SafeAreaView edges={['bottom']} style={styles.actions}>
+          {p.purchase.available && !acceptedOffer && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Ajouter au panier"
+              disabled={addToCart.isPending}
+              onPress={() =>
+                addToCart.mutate(
+                  { productId: p.id, quantity: 1 },
+                  {
+                    onSuccess: () =>
+                      Alert.alert('Ajouté au panier', undefined, [
+                        { text: 'Continuer', style: 'cancel' },
+                        { text: 'Voir le panier', onPress: () => router.push('/cart') },
+                      ]),
+                    onError: (e) =>
+                      Alert.alert('Panier', e instanceof ApiError ? e.message : 'Ajout impossible'),
+                  },
+                )
+              }
+              style={styles.cartBtn}
+            >
+              <Ionicons name="bag-add-outline" size={22} color={colors.text} />
+            </Pressable>
+          )}
           <Button
             title="Contacter"
             variant="secondary"
@@ -436,6 +467,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+  },
+  cartBtn: {
+    width: MIN_TOUCH + 4,
+    minHeight: MIN_TOUCH + 4,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sheet: {
     backgroundColor: colors.surface,
