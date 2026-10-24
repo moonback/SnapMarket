@@ -40,6 +40,7 @@ export interface AppConfig {
   };
   business: { defaultCommissionBps: number; defaultStoryTtlHours: number };
   expoAccessToken: string | null;
+  video: { ffmpegPath: string; ffprobePath: string; maxDimension: number; timeoutSeconds: number };
 }
 
 function str(name: string, fallback?: string): string {
@@ -131,6 +132,12 @@ export function loadConfig(): AppConfig {
       defaultStoryTtlHours: int('STORY_TTL_HOURS', 24),
     },
     expoAccessToken: optional('EXPO_ACCESS_TOKEN'),
+    video: {
+      ffmpegPath: str('FFMPEG_PATH', 'ffmpeg'),
+      ffprobePath: str('FFPROBE_PATH', 'ffprobe'),
+      maxDimension: int('VIDEO_MAX_DIMENSION', 1280),
+      timeoutSeconds: int('VIDEO_TRANSCODE_TIMEOUT_SECONDS', 180),
+    },
   };
 }
 

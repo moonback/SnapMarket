@@ -52,6 +52,8 @@ export interface MediaDto {
   thumbnailUrl: string | null;
   width: number | null;
   height: number | null;
+  /** Durée réelle mesurée par le serveur (vidéos), en secondes. */
+  durationSeconds: number | null;
 }
 
 export interface RatingSummary {

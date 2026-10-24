@@ -1,8 +1,14 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Media } from '@prisma/client';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import sharp from 'sharp';
+import { APP_CONFIG, AppConfig } from '../config/configuration';
 import { PrismaService } from '../prisma/prisma.service';
 import { finalKey } from './media.service';
 import { StorageService } from './storage.service';
+import { assertAcceptable, extractPoster, probeVideo, transcodeVideo } from './video-transcoder';
 
 const MAX_DIMENSION = 2048;
 const THUMB_DIMENSION = 480;
@@ -15,6 +21,7 @@ export class MediaProcessorService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
   async process(mediaId: string): Promise<void> {
@@ -62,18 +69,7 @@ export class MediaProcessorService {
           },
         });
       } else {
-        // Vidéo : vérification de la signature ISO-BMFF (« ftyp ») sans transcodage.
-        const header = await this.storage.getRange(media.storageKey, 0, 11);
-        if (header.length < 12 || header.subarray(4, 8).toString('ascii') !== 'ftyp') {
-          throw new Error('Le fichier n’est pas une vidéo MP4/MOV valide');
-        }
-        const key = finalKey(media);
-        await this.storage.copy(media.storageKey, key, media.mimeType);
-        await this.storage.deleteMany([media.storageKey]);
-        await this.prisma.media.update({
-          where: { id: media.id },
-          data: { status: 'READY', storageKey: key },
-        });
+        await this.processVideo(media);
       }
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
@@ -83,6 +79,51 @@ export class MediaProcessorService {
         data: { status: 'FAILED', failureReason: reason.slice(0, 500) },
       });
       await this.storage.deleteMany([media.storageKey]).catch(() => undefined);
+    }
+  }
+
+  /**
+   * Vidéo : mesure de la durée réelle (ffprobe), refus au-delà de la limite, transcodage
+   * H.264/AAC sans métadonnées, image d'aperçu. Les fichiers temporaires sont supprimés
+   * à la fin du traitement : rien n'est conservé sur le disque du worker.
+   */
+  private async processVideo(media: Media): Promise<void> {
+    const dir = await mkdtemp(join(tmpdir(), 'snapmarket-video-'));
+    try {
+      const input = join(dir, 'input');
+      const output = join(dir, 'output.mp4');
+      const poster = join(dir, 'poster.jpg');
+      await this.storage.downloadToFile(media.storageKey, input);
+      const probe = await probeVideo(input, this.config.video);
+      assertAcceptable(probe);
+      const size = await transcodeVideo(input, output, probe, this.config.video);
+      const result = await probeVideo(output, this.config.video);
+      await extractPoster(output, poster, result.durationSeconds, this.config.video);
+      const thumb = await sharp(poster)
+        .resize({ width: THUMB_DIMENSION, height: THUMB_DIMENSION, fit: 'inside' })
+        .webp({ quality: 75 })
+        .toBuffer();
+      const key = finalKey(media);
+      const thumbKey = finalKey(media, '_thumb');
+      await this.storage.putFile(key, output, 'video/mp4');
+      await this.storage.put(thumbKey, thumb, 'image/webp');
+      await this.storage.deleteMany([media.storageKey]);
+      await this.prisma.media.update({
+        where: { id: media.id },
+        data: {
+          status: 'READY',
+          storageKey: key,
+          thumbnailKey: thumbKey,
+          mimeType: 'video/mp4',
+          width: size.width,
+          height: size.height,
+          // Durée réelle mesurée (remplace la durée déclarée par le client).
+          durationSeconds: Math.max(1, Math.round(result.durationSeconds)),
+          actualBytes: (await stat(output)).size,
+        },
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
   }
 }

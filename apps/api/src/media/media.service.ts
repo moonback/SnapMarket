@@ -168,6 +168,8 @@ export class MediaService {
         ready && media.thumbnailKey ? await this.storage.readUrl(media.thumbnailKey) : null,
       width: media.width,
       height: media.height,
+      durationSeconds:
+        media.kind === 'VIDEO' && media.status === 'READY' ? media.durationSeconds : null,
     };
   }
 
